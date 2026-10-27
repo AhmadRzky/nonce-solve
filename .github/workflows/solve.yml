@@ -1,0 +1,30 @@
+name: nonce-solve
+on:
+  workflow_dispatch:
+    inputs:
+      budget_sec:
+        description: "solver budget seconds"
+        required: true
+        default: "420"
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run solver portfolio slice
+        run: bash run_job.sh $(( ${{ matrix.job }} * 1000 )) "${{ inputs.budget_sec }}"
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sol-${{ matrix.job }}
+          path: |
+            solution.txt
+            result.txt
+          if-no-files-found: ignore
+          retention-days: 1
