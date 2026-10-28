@@ -16,8 +16,14 @@ for k in 0 1 2 3; do
   node probsat.js inst.json "$BUDGET" "$seed" "$cb" > "out/out_${seed}.txt" 2>&1 &
   pids+=($!)
 done
+# CDCL lane (2026-10-28 escalation): 1 extra process per job -- BP-guided fixed-var CaDiCaL
+# (fixcdcl approach). Writes solution.txt atomically ONLY after local 0-unsat verification;
+# its log/status never enter the out_*.txt stream that result.txt's "best": parsing reads.
+bash cdcl_lane.sh "$BUDGET" > out/cdcl_lane.log 2>&1 &
+pids+=($!)
 solved=""
 for i in $(seq 1 $((BUDGET + 30))); do
+  if [ -s solution.txt ]; then solved=cdcl; break; fi
   for k in 0 1 2 3; do
     seed=$((SEED_BASE + k))
     if grep -qE '^[01]{1536}$' "out/out_${seed}.txt" 2>/dev/null; then
@@ -34,5 +40,6 @@ done
 for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
 wait 2>/dev/null
 echo "job seed_base=$SEED_BASE solved_by=${solved:-none}" > result.txt
+[ -f cdcl_status.txt ] && cat cdcl_status.txt >> result.txt
 cat out/out_*.txt >> result.txt 2>/dev/null
 ls -la solution.txt 2>/dev/null || echo "no solution"
