@@ -13,5 +13,9 @@ for (const line of txt.split(/\r?\n/)) {
   }
 }
 if (cur.length) clauses.push(cur);
-fs.writeFileSync("inst.json", JSON.stringify({ variables: 1536, clauses }));
+let vars = 0;
+const pm = txt.match(/^p\s+cnf\s+(\d+)\s+(\d+)/m);
+if (pm) vars = parseInt(pm[1], 10);
+if (!vars) for (const c of clauses) for (const l of c) vars = Math.max(vars, Math.abs(l));
+fs.writeFileSync("inst.json", JSON.stringify({ variables: vars, clauses }));
 console.log("converted:", clauses.length, "clauses");
