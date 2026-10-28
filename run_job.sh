@@ -6,9 +6,14 @@ BUDGET=${2:-420}
 node cnf2json.mjs inst.cnf
 mkdir -p out
 pids=()
+# cb spread (2026-10-28 upgrade): rotate cb 3.7/4.3/5.0/5.6 by (process k + job index) so each
+# 20-job run covers all four values evenly (20 processes each); fleet total unchanged (80/run).
+cbs=(3.7 4.3 5.0 5.6)
+jobidx=$((SEED_BASE / 1000))
 for k in 0 1 2 3; do
   seed=$((SEED_BASE + k))
-  node probsat.js inst.json "$BUDGET" "$seed" 5.0 > "out/out_${seed}.txt" 2>&1 &
+  cb=${cbs[$(( (k + jobidx) % 4 ))]}
+  node probsat.js inst.json "$BUDGET" "$seed" "$cb" > "out/out_${seed}.txt" 2>&1 &
   pids+=($!)
 done
 solved=""
