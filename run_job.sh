@@ -8,7 +8,7 @@ mkdir -p out
 pids=()
 for k in 0 1 2 3; do
   seed=$((SEED_BASE + k))
-  node probsat.js inst.json "$BUDGET" "$seed" 3.7 > "out/out_${seed}.txt" 2>&1 &
+  node probsat.js inst.json "$BUDGET" "$seed" 5.0 > "out/out_${seed}.txt" 2>&1 &
   pids+=($!)
 done
 solved=""
