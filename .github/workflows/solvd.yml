@@ -1,0 +1,43 @@
+name: solvd-solve
+on:
+  workflow_dispatch:
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install SAT stack
+        if: matrix.job < 14
+        run: pip install --quiet python-sat
+      - name: Install CP-SAT stack
+        if: matrix.job >= 14
+        run: pip install --quiet ortools
+      - name: Solve (SAT jobs)
+        if: matrix.job < 14
+        run: python3 fleet_solve.py ${{ matrix.job }} 470
+      - name: Solve (CP-SAT jobs)
+        if: matrix.job >= 14
+        run: python3 cpsat_fleet.py board.json answer.json 470 $(( 1000 + ${{ matrix.job }} ))
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: solvd-${{ matrix.job }}
+          path: |
+            grid.json
+            result.txt
+            answer.json
+          if-no-files-found: ignore
+          retention-days: 1
