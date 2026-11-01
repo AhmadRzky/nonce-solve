@@ -1,0 +1,95 @@
+name: chip404
+
+# Chip404 free-mint proof-of-work fleet.
+# Each job searches a disjoint nonce partition (base_offset + idx * 2^40) for
+# keccak256(salt || wallet || nonce) <= strict_target. Hashes that only satisfy the
+# looser secondary target are recorded in the job's log artifact (secondary-<idx>.txt).
+# A primary find exits immediately and uploads a chip404-found-<run_id>-<idx> artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      strict_target:
+        description: "Strict target hex (64 chars) - primary search target"
+        required: true
+      loose_target:
+        description: "Loose/secondary target hex (64 chars); empty disables"
+        required: false
+        default: ""
+      seconds:
+        description: "Solve seconds per job"
+        required: false
+        default: "20000"
+      wave:
+        description: "Wave label recorded in FOUND.json"
+        required: false
+        default: "w1"
+      base_offset:
+        description: "Nonce offset of job 0 in this run"
+        required: false
+        default: "0"
+
+env:
+  SALT: "445aa0838438a376563c290a2c15cf7ddea0883854555b68b0e01efefafff39a"
+  WALLET: "36BfCce478a860F316c9F6b1405D166FD96e513b"
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build solver
+        run: |
+          gcc -O3 -march=native -pthread -o solver chip404_solver.c
+          echo "cores: $(nproc)"
+
+      - name: Self-test (trivial target must find immediately)
+        run: |
+          ./solver "$SALT" "$WALLET" ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff 1 5 0 | tee selftest.txt
+          grep -q "found=1" selftest.txt
+
+      - name: Solve partition
+        shell: bash
+        run: |
+          OFFSET=$(( ${{ inputs.base_offset }} + ${{ matrix.idx }} * 1099511627776 ))
+          echo "wave=${{ inputs.wave }} idx=${{ matrix.idx }} offset=$OFFSET strict=${{ inputs.strict_target }} loose=${{ inputs.loose_target }} seconds=${{ inputs.seconds }}"
+          set +e
+          if [ -n "${{ inputs.loose_target }}" ]; then
+            ./solver "$SALT" "$WALLET" "${{ inputs.strict_target }}" 4 "${{ inputs.seconds }}" "$OFFSET" "${{ inputs.loose_target }}" "secondary-${{ matrix.idx }}.txt" | tee "result-${{ matrix.idx }}.txt"
+          else
+            ./solver "$SALT" "$WALLET" "${{ inputs.strict_target }}" 4 "${{ inputs.seconds }}" "$OFFSET" | tee "result-${{ matrix.idx }}.txt"
+          fi
+          set -e
+          if grep -q "found=1" "result-${{ matrix.idx }}.txt"; then
+            NONCE=$(sed -n 's/.*nonce=\([0-9]*\).*/\1/p' "result-${{ matrix.idx }}.txt" | head -1)
+            HASH=$(sed -n 's/.*hash=\([0-9a-f]*\).*/\1/p' "result-${{ matrix.idx }}.txt" | head -1)
+            printf '{"nonce":"%s","hash":"%s","wave":"${{ inputs.wave }}","idx":${{ matrix.idx }},"offset":"%s","strict_target":"${{ inputs.strict_target }}","loose_target":"${{ inputs.loose_target }}","run_id":"${{ github.run_id }}"}\n' "$NONCE" "$HASH" "$OFFSET" > FOUND.json
+            cat FOUND.json
+          fi
+          ls -la
+
+      - name: Upload FOUND artifact
+        if: hashFiles('FOUND.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: chip404-found-${{ github.run_id }}-${{ matrix.idx }}
+          path: FOUND.json
+          retention-days: 30
+
+      - name: Upload log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chip404-log-${{ github.run_id }}-${{ matrix.idx }}
+          path: |
+            result-${{ matrix.idx }}.txt
+            secondary-${{ matrix.idx }}.txt
+          retention-days: 7
+          if-no-files-found: ignore
